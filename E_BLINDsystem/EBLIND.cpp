@@ -7,6 +7,17 @@
 using namespace std;
 using namespace cv;
 
+
+ErrorInfo::ErrorInfo(std::string str)
+{
+	this->info = str;
+}
+
+ErrorInfo::~ErrorInfo()
+{
+
+}
+
 EBLIND::EBLIND()
 {
 
@@ -104,7 +115,7 @@ void EBLIND::GenerateWaterMark(int size)             //根据实验需要先预先生成256
 	}
 }
 
-void EBLIND::embedWM(std::string srcpath,std::string wmpath)
+void EBLIND::embedWM(std::string srcpath, std::string wmpath)
 {
 	Mat src = imread(srcpath, CV_LOAD_IMAGE_UNCHANGED);
 	Mat wm = imread(wmpath, CV_LOAD_IMAGE_UNCHANGED);
@@ -112,10 +123,73 @@ void EBLIND::embedWM(std::string srcpath,std::string wmpath)
 	auto ncols = src.cols;
 	auto mrows = wm.rows;
 	auto mcols = wm.cols;
-	if (!(nrows == 256 && ncols == 256 || nrows == 512 && ncols == 512))
+	int MaxSrc = -1, MinSrc = 256, MaxWm = -1, MinWm = 256;
+	int MaxVal = -256, MinVal = 511, tmpval, Gap;
+	if (nrows != mrows || mcols != ncols)  // 图片与给定的大小不同
 	{
-		cout << "size of the given file is illeagle" << endl;
-		return;
+		throw new ErrorInfo("watermark and picture have diffierent size!");
 	}
 	// 加上水印
+	// m = 1证明是加算，这个时候需要考虑最大和最小值之间的差距，规格化图片
+
+	uchar *pSrc = src.data;
+	uchar *pWm = wm.data;
+
+	if (pSrc == NULL || pWm == NULL)
+		throw new ErrorInfo("one of the given picture is empty!");
+	//第一次遍历是为了得到两张图片合成之后图片的灰度值中的最大和最小值
+
+	int size[] = { mrows, mcols };
+	Mat Target(2, size, CV_8UC1, Scalar::all(0));
+	uchar *pTar = Target.data;
+	for (auto i = 0; i < nrows; ++i)
+	{
+		pSrc = src.ptr<uchar>(i);
+		pWm = wm.ptr<uchar>(i);
+		pTar = Target.ptr<uchar>(i);
+		for (auto j = 0; j < ncols; ++j)
+		{
+			if (this->m == 1)
+				tmpval = (int)pSrc[j] + (int)pWm[j];
+			else //m =0 的情况
+				tmpval = (int)pSrc[j] - (int)pWm[j];
+			if (tmpval > MaxVal)
+				MaxVal = tmpval;
+			if (tmpval < MinVal)
+				MinVal = tmpval;
+			if (MinVal >= 0 && MaxVal <= 255)
+			{
+				pTar[j] = tmpval;
+			}
+		}
+	}
+	Gap = MaxVal - MinVal; // 
+	if (MaxVal <= 255 && MinVal >= 0)
+	{
+		// 采取保存图片的操作
+	}
+	else
+	{  //必定是MAX > 255，超过了灰度值的上限
+		// 这里不考虑两者相等并且都超过了255的情况，对于符合高斯分布的水印和有局部特征的图片，在256*256像素点的情况下几乎不可能出现这种情况
+		for (auto i = 0; i < nrows; ++i)
+		{
+			pSrc = src.ptr<uchar>(i);
+			pWm = wm.ptr<uchar>(i);
+			pTar = Target.ptr<uchar>(i);
+			for (auto j = 0; j < ncols; ++j)
+			{
+				if (this->m == 1)
+					tmpval = (int)pSrc[j] + (int)pWm[j];
+				else
+					tmpval = (int)pSrc[j]  (int)pWm[j];
+				if (MinVal >= 0 && MaxVal <= 255)
+				{
+					//以最最小值为基准，等比例放大
+					pTar[j] = (uchar)((tmpval - MinVal)*Gap / 255);
+				}
+			}
+		}
+		//加水印完毕，保存图片
+	}
+	
 }
