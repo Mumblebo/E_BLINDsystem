@@ -181,7 +181,7 @@ void EBLIND::embedWM(std::string srcpath, std::string wmpath)
 				if (this->m == 1)
 					tmpval = (int)pSrc[j] + (int)pWm[j];
 				else
-					tmpval = (int)pSrc[j]  (int)pWm[j];
+					tmpval = (int)pSrc[j] - (int)pWm[j];
 				if (MinVal >= 0 && MaxVal <= 255)
 				{
 					//以最最小值为基准，等比例放大
@@ -192,4 +192,49 @@ void EBLIND::embedWM(std::string srcpath, std::string wmpath)
 		//加水印完毕，保存图片
 	}
 	
+}
+
+int EBLIND::checkWM(std::string srcpath, std::string wmpath)
+{
+	// 这里应该是直接用两张图进行计算相似性，不是用简化后的公式
+	Mat src = imread(srcpath, CV_LOAD_IMAGE_UNCHANGED);
+	Mat wm = imread(wmpath, CV_LOAD_IMAGE_UNCHANGED);
+	auto srows = src.rows;
+	auto scols = src.cols;
+	auto wrows = src.rows;
+	auto wcols = src.cols;
+	if (!(srows == wrows && scols == wcols))
+	{
+		throw new ErrorInfo("source image and watermark have different size!");
+	}
+	int temp = 0;
+	double result;
+	uchar *pSrc = src.data;
+	uchar *pWm = wm.data;
+	if (pSrc == NULL || pWm == NULL)
+	{
+		throw new ErrorInfo("one(or both) of the picture is empty");
+	}
+	for (int i = 0; i < srows; i++)
+	{
+		for (int j = 0; j < scols; j++)
+		{
+			pSrc = src.ptr<uchar>(i);
+			pWm = wm.ptr<uchar>(i);
+			temp += (int)pSrc[j] * pWm[j];
+		}
+	}
+	result = temp*1.0 / srows * scols;
+	if (result > this->zlc)
+	{
+		return 1;
+	}
+	else if (result < -zlc)
+	{
+		return 0;
+	}
+	else
+	{
+		return -1;
+	}
 }
