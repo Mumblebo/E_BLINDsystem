@@ -199,18 +199,27 @@ int EBLIND::checkWM(std::string srcpath, std::string wmpath)
 	// 这里应该是直接用两张图进行计算相似性，不是用简化后的公式
 	Mat src = imread(srcpath, CV_LOAD_IMAGE_UNCHANGED);
 	Mat wm = imread(wmpath, CV_LOAD_IMAGE_UNCHANGED);
+	return checkWM(src, wm);
+}
+
+int EBLIND::checkWM(const Mat& src, const Mat& wm)
+{
 	auto srows = src.rows;
 	auto scols = src.cols;
-	auto wrows = src.rows;
-	auto wcols = src.cols;
+	auto wrows = wm.rows;
+	auto wcols = wm.cols;
+	if (!(srows == wrows && scols == wcols))
+	{
+		throw new ErrorInfo("source image and watermark have different size!");
+	}
 	if (!(srows == wrows && scols == wcols))
 	{
 		throw new ErrorInfo("source image and watermark have different size!");
 	}
 	int temp = 0;
 	double result;
-	uchar *pSrc = src.data;
-	uchar *pWm = wm.data;
+	const uchar *pSrc = src.data;
+	const uchar *pWm = wm.data;
 	if (pSrc == NULL || pWm == NULL)
 	{
 		throw new ErrorInfo("one(or both) of the picture is empty");
@@ -221,7 +230,7 @@ int EBLIND::checkWM(std::string srcpath, std::string wmpath)
 		{
 			pSrc = src.ptr<uchar>(i);
 			pWm = wm.ptr<uchar>(i);
-			temp += (int)pSrc[j] * pWm[j];
+			temp += (int)pSrc[j] * (int)pWm[j];
 		}
 	}
 	result = temp*1.0 / srows * scols;
@@ -237,4 +246,22 @@ int EBLIND::checkWM(std::string srcpath, std::string wmpath)
 	{
 		return -1;
 	}
+}
+
+
+void EBLIND::SaveImg(const Mat &src, const std::string srcName, const std::string wmName)
+{
+	auto index = srcName.find('.');
+	string part1, part2;
+	part1.assign(srcName, 0, index);
+	index = wmName.find('.');
+	part2.assign(wmName, 0, index);
+
+	string finalName = "./result/";
+	finalName.append(part1);
+	finalName.append("+");
+	finalName.append(part2);
+	finalName.append(".bmp");
+
+	imwrite(finalName, src);
 }
