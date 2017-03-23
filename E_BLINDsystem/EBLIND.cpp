@@ -3,6 +3,8 @@
 #include<cv.h>
 #include<Windows.h>
 #include<time.h>
+#include<random>
+#include <functional>
 #include<highgui\highgui.hpp>
 using namespace std;
 using namespace cv;
@@ -74,6 +76,8 @@ void EBLIND::GenerateWaterMark(int size)             //根据实验需要先预先生成256
 	std::string filename("");
 	auto channels = wm1.channels();
 	std::stringstream ss;   //用于int转化为string
+	float sigma = 42.666; // 作为正态分布的方差
+	int miu, dotpix;        //记录正态分布的均值
 	string temp("");
 	string filesize;
 	ss << size;
@@ -89,16 +93,27 @@ void EBLIND::GenerateWaterMark(int size)             //根据实验需要先预先生成256
 
 	for (auto k = 0; k < 40; k++)
 	{
-		srand(time(0));
+		std::default_random_engine generator(time(NULL));
+		std::uniform_int_distribution<int> dis(0, 255);
+		auto dice = std::bind(dis, generator);
+		miu = dice();  //随机产生一个数作为均值
+		std::normal_distribution<double> nids(miu, sigma);
+		auto nordice = std::bind(nids, generator);
 		for (auto i = 0; i < rows; i++)
 		{
 			p = wm1.ptr<uchar>(i);
 			for (auto j = 0; j < cols; j++)
 			{
-				p[j] = (int)rand() % 256;
+				while (1)
+				{
+					dotpix = (int)dice();
+					if (dotpix >= 0 && dotpix <= 255)
+						break;
+				}
+				p[j] = dotpix;
 			}
 		}
-		cout << "hello" << endl;
+		cout << "hello, 高斯分布平均值: "<< miu << endl;
 		if (!temp.empty())
 			temp.clear();
 		if (k>0)
@@ -111,7 +126,7 @@ void EBLIND::GenerateWaterMark(int size)             //根据实验需要先预先生成256
 		ss >> temp;
 		filename.append("-" + temp + ".bmp");
 		imwrite("./waterMark/" + filesize +filename, wm1);
-		Sleep(1000);
+		Sleep(2000);
 	}
 }
 
@@ -194,15 +209,9 @@ void EBLIND::embedWM(std::string srcpath, std::string wmpath)
 	
 }
 
-int EBLIND::checkWM(std::string srcpath, std::string wmpath)
-{
-	// 这里应该是直接用两张图进行计算相似性，不是用简化后的公式
-	Mat src = imread(srcpath, CV_LOAD_IMAGE_UNCHANGED);
-	Mat wm = imread(wmpath, CV_LOAD_IMAGE_UNCHANGED);
-	return checkWM(src, wm);
-}
 
-int EBLIND::checkWM(const Mat& src, const Mat& wm)
+
+int EBLIND::checkWM(const cv::Mat &src, const cv::Mat &wm)
 {
 	auto srows = src.rows;
 	auto scols = src.cols;
@@ -248,8 +257,15 @@ int EBLIND::checkWM(const Mat& src, const Mat& wm)
 	}
 }
 
+int EBLIND::checkWM(std::string srcpath, std::string wmpath)
+{
+	// 这里应该是直接用两张图进行计算相似性，不是用简化后的公式
+	Mat src = imread(srcpath, CV_LOAD_IMAGE_UNCHANGED);
+	Mat wm = imread(wmpath, CV_LOAD_IMAGE_UNCHANGED);
+	return checkWM(src, wm);
+}
 
-void EBLIND::SaveImg(const Mat &src, const std::string srcName, const std::string wmName)
+void EBLIND::SaveImg(const cv::Mat &src, const std::string srcName, const std::string wmName)
 {
 	auto index = srcName.find('.');
 	string part1, part2;
