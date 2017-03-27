@@ -197,14 +197,34 @@ void EBLIND::embedWM(std::string srcpath, std::string wmpath)
 					tmpval = (int)pSrc[j] + (int)pWm[j];
 				else
 					tmpval = (int)pSrc[j] - (int)pWm[j];
-				if (MinVal >= 0 && MaxVal <= 255)
-				{
 					//以最最小值为基准，等比例放大
-					pTar[j] = (uchar)((tmpval - MinVal)*Gap / 255);
-				}
+				pTar[j] = (uchar)((tmpval - MinVal)*Gap / 255);
 			}
 		}
 		//加水印完毕，保存图片
+	}
+	string srcName, wmName;
+	if (this->saveOrNot)
+	{
+		auto index1 = srcpath.rfind('/');
+		auto index2 = wmpath.rfind('/');
+		if (index1 != std::string::npos)
+		{
+			srcName.assign(srcpath, index1 + 1, srcpath.length() - index1 - 1);
+			
+		}
+		else{
+			srcName = srcpath;
+		}
+		if (index2 != std::string::npos)
+		{
+			wmName.assign(wmpath, index2 + 1, wmpath.length() - index2 - 1);
+		}
+		else
+		{
+			wmName = wmpath;
+		}
+		SaveImg(Target, srcName, wmpath);
 	}
 	
 }

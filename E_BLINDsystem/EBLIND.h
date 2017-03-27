@@ -1,6 +1,9 @@
 #pragma once
 #include<iostream>
+#include<cv.h>
 #include<memory>
+#include<highgui\highgui.hpp>
+
 class EBLIND
 {
 public:
@@ -15,16 +18,16 @@ public:
 		m = mm;
 		zlc = zz;
 	}
-	void setSave(boolean temp)
+	void setSave(bool temp)
 	{
 		saveOrNot = temp;
 	}
 	int checkWM(std::string srcpath,std::string wmpath); //根据检测值和阈值的比较，返回0或者1，或者-1表示没有水印
-	int checkWM(const Mat& src, const Mat& wm);
+	int checkWM(const cv::Mat &src, const cv::Mat &wm);
 protected:
-	void SaveImg(const Mat &src, const std::string srcName, const std::string wmName);
+	void SaveImg(const cv::Mat &src, const std::string srcName, const std::string wmName);
 private:
-	boolean saveOrNot;   //加完水印之后的图片要不要保存
+	bool saveOrNot;   //加完水印之后的图片要不要保存
 	int a, m; // 用于将
 	std::string filepath;
 	double zlc;
