@@ -5,6 +5,7 @@
 #include<time.h>
 #include<random>
 #include <functional>
+#include<fstream>
 #include<highgui\highgui.hpp>
 using namespace std;
 using namespace cv;
@@ -22,7 +23,9 @@ ErrorInfo::~ErrorInfo()
 
 EBLIND::EBLIND()
 {
-
+	this->eightbitCut = true;  //默认采用8bit截断方式
+	this->SavePath = "./result/";  //默认保存加完水印之后的图片路径
+	this->a = 1; // 默认的嵌入强度为1
 }
 
 EBLIND::~EBLIND()
@@ -77,7 +80,7 @@ void EBLIND::GenerateWaterMark(int size)             //根据实验需要先预先生成256
 	auto channels = wm1.channels();
 	std::stringstream ss;   //用于int转化为string
 	float sigma = 42.666; // 作为正态分布的方差
-	int miu, dotpix;        //记录正态分布的均值
+	int miu = 0, dotpix;        //记录正态分布的均值
 	string temp("");
 	string filesize;
 	ss << size;
@@ -94,10 +97,10 @@ void EBLIND::GenerateWaterMark(int size)             //根据实验需要先预先生成256
 	for (auto k = 0; k < 40; k++)
 	{
 		std::default_random_engine generator(time(NULL));
-		std::uniform_int_distribution<int> dis(0, 255);
+		std::uniform_int_distribution<int> dis(30, 40); //保证值均落在 -128 到 128 之间 
 		auto dice = std::bind(dis, generator);
-		miu = dice();  //随机产生一个数作为均值
-		std::normal_distribution<double> nids(miu, sigma);
+		sigma = dice();  //随机产生一个数作为方差
+		std::normal_distribution<double> nids(miu, 1.0*sigma);
 		auto nordice = std::bind(nids, generator);
 		for (auto i = 0; i < rows; i++)
 		{
@@ -106,14 +109,14 @@ void EBLIND::GenerateWaterMark(int size)             //根据实验需要先预先生成256
 			{
 				while (1)
 				{
-					dotpix = (int)dice();
-					if (dotpix >= 0 && dotpix <= 255)
+					dotpix = (int)nordice();
+					if (dotpix >= -128 && dotpix <= 127)
 						break;
 				}
-				p[j] = dotpix;
+				p[j] = 127 - dotpix;  //对于 0 -127之间的灰度值，还是正数，对于-128 到 -1之间的采用 128到255保存
 			}
 		}
-		cout << "hello, 高斯分布平均值: "<< miu << endl;
+		cout << "hello, 高斯分布平均值: "<< miu <<  " fangcha :" <<  sigma <<endl;
 		if (!temp.empty())
 			temp.clear();
 		if (k>0)
@@ -134,10 +137,14 @@ void EBLIND::embedWM(std::string srcpath, std::string wmpath)
 {
 	Mat src = imread(srcpath, CV_LOAD_IMAGE_UNCHANGED);
 	Mat wm = imread(wmpath, CV_LOAD_IMAGE_UNCHANGED);
+//	imshow("picture1", src);
+//	imshow("picture2", wm);
+	waitKey(0);
 	auto nrows = src.rows;
 	auto ncols = src.cols;
 	auto mrows = wm.rows;
 	auto mcols = wm.cols;
+	int tempWat;
 	int MaxSrc = -1, MinSrc = 256, MaxWm = -1, MinWm = 256;
 	int MaxVal = -256, MinVal = 511, tmpval, Gap;
 	if (nrows != mrows || mcols != ncols)  // 图片与给定的大小不同
@@ -164,24 +171,29 @@ void EBLIND::embedWM(std::string srcpath, std::string wmpath)
 		pTar = Target.ptr<uchar>(i);
 		for (auto j = 0; j < ncols; ++j)
 		{
+			tempWat = (int)pWm[j];
+
+			tempWat = -(tempWat - 127);
+
+		//	tempWat /= this->scale;
 			if (this->m == 1)
-				tmpval = (int)pSrc[j] + (int)pWm[j];
+				tmpval = (int)pSrc[j] + a *tempWat;
 			else //m =0 的情况
-				tmpval = (int)pSrc[j] - (int)pWm[j];
+				tmpval = (int)pSrc[j] - a *tempWat;
 			if (tmpval > MaxVal)
 				MaxVal = tmpval;
 			if (tmpval < MinVal)
 				MinVal = tmpval;
-			if (MinVal >= 0 && MaxVal <= 255)
+			if ((MinVal >= 0 && MaxVal <= 255) || this->eightbitCut == true)
 			{
-				pTar[j] = tmpval;
+				pTar[j] = (uchar)tmpval;
 			}
 		}
 	}
 	Gap = MaxVal - MinVal; // 
-	if (MaxVal <= 255 && MinVal >= 0)
+	if (MaxVal <= 255 && MinVal >= 0 || this->eightbitCut)
 	{
-		// 采取保存图片的操作
+		// 不采取任何操作
 	}
 	else
 	{  //必定是MAX > 255，超过了灰度值的上限
@@ -193,12 +205,18 @@ void EBLIND::embedWM(std::string srcpath, std::string wmpath)
 			pTar = Target.ptr<uchar>(i);
 			for (auto j = 0; j < ncols; ++j)
 			{
+				tempWat = (int)pWm[j];
+
+				tempWat = -(tempWat - 127);
+
+				tempWat /= this->scale;
 				if (this->m == 1)
-					tmpval = (int)pSrc[j] + (int)pWm[j];
+					tmpval = (int)pSrc[j] + a *tempWat;
 				else
-					tmpval = (int)pSrc[j] - (int)pWm[j];
+					tmpval = (int)pSrc[j] - a *tempWat;
+;
 					//以最最小值为基准，等比例放大
-				pTar[j] = (uchar)((tmpval - MinVal)*Gap / 255);
+				pTar[j] = (uchar)((tmpval - MinVal)*255 / Gap);
 			}
 		}
 		//加水印完毕，保存图片
@@ -211,20 +229,23 @@ void EBLIND::embedWM(std::string srcpath, std::string wmpath)
 		if (index1 != std::string::npos)
 		{
 			srcName.assign(srcpath, index1 + 1, srcpath.length() - index1 - 1);
+		//	cout << srcName << endl;
 			
 		}
 		else{
 			srcName = srcpath;
+			
 		}
 		if (index2 != std::string::npos)
 		{
 			wmName.assign(wmpath, index2 + 1, wmpath.length() - index2 - 1);
+		//	cout << wmName << endl;
 		}
 		else
 		{
 			wmName = wmpath;
 		}
-		SaveImg(Target, srcName, wmpath);
+		SaveImg(Target, srcName, wmName);
 	}
 	
 }
@@ -233,10 +254,14 @@ void EBLIND::embedWM(std::string srcpath, std::string wmpath)
 
 int EBLIND::checkWM(const cv::Mat &src, const cv::Mat &wm)
 {
+
 	auto srows = src.rows;
 	auto scols = src.cols;
 	auto wrows = wm.rows;
 	auto wcols = wm.cols;
+	int tempWat = 0;
+	fstream fout;
+	fout.open("detectValueForPart4.txt", ios::out | ios::app);
 	if (!(srows == wrows && scols == wcols))
 	{
 		throw new ErrorInfo("source image and watermark have different size!");
@@ -245,7 +270,7 @@ int EBLIND::checkWM(const cv::Mat &src, const cv::Mat &wm)
 	{
 		throw new ErrorInfo("source image and watermark have different size!");
 	}
-	int temp = 0;
+	int temp = 0, middle, count = 0;
 	double result;
 	const uchar *pSrc = src.data;
 	const uchar *pWm = wm.data;
@@ -259,10 +284,23 @@ int EBLIND::checkWM(const cv::Mat &src, const cv::Mat &wm)
 		{
 			pSrc = src.ptr<uchar>(i);
 			pWm = wm.ptr<uchar>(i);
-			temp += (int)pSrc[j] * (int)pWm[j];
+			tempWat = (int)pWm[j];
+			tempWat = -(tempWat - 127);
+			tempWat /= scale;
+			middle = (int)pSrc[j] * tempWat;
+			if (middle <= 1)
+			{
+				count++;
+			}
+			temp += middle;
 		}
 	}
-	result = temp*1.0 / srows * scols;
+//	cout << "temp: " << temp << endl;
+	result = temp*1.0 / (srows * scols);
+//	cout << "smaller than 1: " << count << endl;
+	cout << "result: " << result << endl;
+	fout << result << endl;
+	fout.close();
 	if (result > this->zlc)
 	{
 		return 1;
@@ -282,6 +320,7 @@ int EBLIND::checkWM(std::string srcpath, std::string wmpath)
 	// 这里应该是直接用两张图进行计算相似性，不是用简化后的公式
 	Mat src = imread(srcpath, CV_LOAD_IMAGE_UNCHANGED);
 	Mat wm = imread(wmpath, CV_LOAD_IMAGE_UNCHANGED);
+	cout << "result for " << srcpath << " " << wmpath << endl;
 	return checkWM(src, wm);
 }
 
@@ -293,7 +332,7 @@ void EBLIND::SaveImg(const cv::Mat &src, const std::string srcName, const std::s
 	index = wmName.find('.');
 	part2.assign(wmName, 0, index);
 
-	string finalName = "./result/";
+	string finalName = SavePath;
 	finalName.append(part1);
 	finalName.append("+");
 	finalName.append(part2);
